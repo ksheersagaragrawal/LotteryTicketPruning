@@ -101,7 +101,7 @@ def oneshot_pruning( post_training_model, input_shape, output_shape, prune_ratio
     return nn.Sequential(*unpruned_layers)  
 
 # In this method of one-shot structured re-initialsed pruning,
-# We prune pm fatures in each layer based on L1 norm, and remove pruned layers outgoing edge
+# We prune pm features in each layer based on L1 norm, and remove pruned layers outgoing edge
 # The nn.Sequential method randomly initialises when called 
 # So we copy the initial values of pre_training_model using indexing
 def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape, output_shape, prune_ratio = 0.2):
@@ -141,7 +141,70 @@ def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape
             param.data = unpruned_layers[index].data
             index=index+2
     return model
-            
+
+# Iterative Pruning 
+# We prune pm features in each layer based on L1 norm, and remove pruned layers outgoing edge
+# The nn.Sequential method randomly initialises when called 
+# So we copy the weights of the model before pruning using indexing
+# The accuracy drops after pruning so we fine tune the model
+def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_iter, max_iter = 100,input_shape = 2, output_shape = 2):
+    
+    # Per round pune ratio and number of epochs for every fine tuning
+    per_round_prune_ratio = prune_ratio/prune_iter
+    if prune_ratio > 0:
+        per_round_prune_ratio = 1 - (1 - prune_ratio) ** (1 / prune_iter)
+    per_round_max_iter = int(max_iter / prune_iter)
+    
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    
+    for epoch in range(max_iter):    
+        # Fine tuning the model
+        optimizer.zero_grad()
+        outputs = model(X_train_tensor)
+        loss = criterion(outputs, y_train_tensor)
+        loss.backward()
+        optimizer.step()
+
+        # Pruing per_round_prune_ratio of layers every max_iter/prune_iter iteration
+        if (epoch + 1) % per_round_max_iter == 0:
+            unpruned_layers = [] 
+            layer_index = 0
+            layers_pruned = []
+            for name, param in model.named_parameters():
+                if 'weight' in name:
+                    # Not pruning the last output layer
+                    if param.shape[0] == output_shape:
+                        layer = nn.Linear(input_shape, output_shape)
+                        with torch.no_grad():
+                            layer.data = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+                        unpruned_layers.append(layer)
+                        unpruned_layers.append(nn.Sigmoid())
+                        continue
+                    # Sorting the features in a layer based on l1 norm
+                    param_with_skipped_input = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+                    sorted_layers = torch.linalg.norm(param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
+                    layers_not_pruned = sorted(sorted_layers[int(per_round_prune_ratio*param_with_skipped_input.shape[0]):])
+                    layers_pruned = sorted(sorted_layers[:int(per_round_prune_ratio*param_with_skipped_input.shape[0])])
+
+                    # Initialising unpruned neurons with pre-training values
+                    layer_data = param_with_skipped_input[layers_not_pruned, :] 
+                    layer = nn.Linear(input_shape, layer_data.shape[0])
+                    input_shape = layer_data.shape[0]
+                    with torch.no_grad():
+                        layer.data = layer_data
+                    unpruned_layers.append(layer)
+                    unpruned_layers.append(nn.ReLU())
+                    #skipping every alternate relu layer
+                    layer_index=layer_index+2
+            model = nn.Sequential(*unpruned_layers)
+            index = 0
+            for name, param in model.named_parameters():
+                if 'weight' in name:
+                    param.data = unpruned_layers[index].data
+                    index=index+2 
+            criterion = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 #Training the model
 criterion = nn.CrossEntropyLoss()
@@ -155,7 +218,6 @@ pruning_ratios = np.linspace(0.1, 0.9, 20)
 itr_pruning_accuracies = []
 oneshot_pruning_reinit_accuracies = []
 oneshot_pruning_accuracies = []
-nonreinitialised_oneshot_pruning_accuracies = []
 
 for prune_ratio in pruning_ratios:
     pre_training_model_cpy = copy.deepcopy(pre_training_model)
@@ -171,16 +233,22 @@ for prune_ratio in pruning_ratios:
     train(oneshot_reinitialised_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
     accuracy = calculate_accuracy(oneshot_reinitialised_pruned_model, X_val_tensor, y_val_tensor)
     oneshot_pruning_reinit_accuracies.append(accuracy)
+
+    # iterative pruning
+    iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 100, input_shape = 2, output_shape = 2)
+    accuracy = calculate_accuracy(model, X_val_tensor, y_val_tensor)
+    itr_pruning_accuracies.append(accuracy)
     
 plt.axhline(y = unpruned_accuracy, color = 'b', linestyle = '--')
 plt.plot(pruning_ratios, oneshot_pruning_accuracies, marker='x')
 plt.plot(pruning_ratios, oneshot_pruning_reinit_accuracies, marker='o')
-plt.legend(["No pruning","One-shot","Re-init One-shot"], loc ="lower right")
+plt.plot(pruning_ratios, itr_pruning_accuracies, marker='*')
+plt.legend(["No pruning","One-shot","Re-init One-shot","Iterative"], loc ="lower right")
 plt.title("Accuracy vs. Pruning Ratio")
 plt.xlabel("Pruning Ratio")
 plt.ylabel("Accuracy")
 plt.grid()
-plt.savefig('oneshot_acc_vs_pm.png')
+plt.savefig('pruning_acc_vs_pm.png')
 plt.show()
 
 
