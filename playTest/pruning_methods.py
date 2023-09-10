@@ -1,12 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.datasets import make_circles
-from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
-import torch.nn.init as init
-import numpy as np
-import copy
 
 # Defining Accuracy
 def calculate_accuracy(model, X, y):
@@ -34,35 +29,45 @@ def train(model,X_train_tensor, X_val_tensor,y_train_tensor, y_val_tensor, epoch
                 val_loss = criterion(val_outputs, y_val_tensor)
                 print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}, Val Loss: {val_loss.item():.4f}")
 
-# Create a circles dataset
-X, y = make_circles(n_samples=1000, factor=0.5, noise=0.1, random_state=42)
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+# Plot decision boundary
+def plot_decision_boundary(model, filename, X_train, y_train):
+    x = torch.linspace(-1.5, 1.5, 1000)
+    y = torch.linspace(-1.5, 1.5, 1000)
+    xv, yv = torch.meshgrid(x, y)
 
-# Convert data to PyTorch tensors
-X_train_tensor = torch.FloatTensor(X_train)
-y_train_tensor = torch.LongTensor(y_train)
-X_val_tensor = torch.FloatTensor(X_val)
-y_val_tensor = torch.LongTensor(y_val)
+    # Reshape xv and yv
+    xv = xv.reshape(-1)
+    yv = yv.reshape(-1)
 
-# Plot data
-#plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train, s=10, cmap=plt.cm.RdBu)
+    # Stack xv and yv into a tensor
+    grid = torch.stack((xv, yv), dim=1)
+    # Feed the grid tensor into the model
 
-# Defining the model
-model = nn.Sequential(
-    nn.Linear(2, 20),
-    nn.ReLU(),
-    nn.Linear(20, 18),
-    nn.ReLU(),
-    nn.Linear(18, 16),
-    nn.ReLU(),
-    nn.Linear(16, 14),
-    nn.ReLU(),
-    nn.Linear(14, 2),
-    nn.Sigmoid()
-)
+    model.eval()
+    with torch.no_grad():
+        outputs = model(grid)
+        
+    # Get the predicted class
+    _, y_pred = torch.max(outputs, 1)
+    
+    fig, ax = plt.subplots(figsize=(5, 5))
 
-# Copying the initial wieghts of the model
-pre_training_model = copy.deepcopy(model)
+
+    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, s=10, cmap=plt.cm.RdBu)
+    im = ax.contourf(x, y, y_pred.reshape(1000, 1000), alpha=0.3, cmap=plt.cm.RdBu)
+    ax.set_title(f"Decision Boundary {filename}")
+    plt.colorbar(im , ax=ax)
+    fig.savefig(filename)
+
+def get_data(weight_data, layer_shape, layers_pruned):
+    return weight_data[:, [col for col in range(layer_shape[1]) if col not in layers_pruned]]
+
+def add_layer(unpruned_layers, input_shape, output_shape, layer_data, activation = nn.ReLU()):
+	layer = nn.Linear(input_shape, output_shape)
+	with torch.no_grad():
+		layer.data = layer_data
+	unpruned_layers.append(layer)
+	unpruned_layers.append(activation)
 
 # One-shotPrune the model
 
@@ -75,27 +80,20 @@ def oneshot_pruning( post_training_model, input_shape, output_shape, prune_ratio
     for name, param in post_training_model.named_parameters():
         if 'weight' in name:
             # Not pruning the last output layer
-            if param.shape[0] == output_shape:
-                layer = nn.Linear(input_shape, output_shape)
-                with torch.no_grad():
-                    layer.data = post_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
-                unpruned_layers.append(layer)
-                unpruned_layers.append(nn.Sigmoid())
+            # if param.shape[0] == output_shape:
+            if layer_index == len(post_training_model)-2:
+                add_layer(unpruned_layers, input_shape, output_shape, get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned), nn.Sigmoid())
                 continue
             # Sorting the features in a layer based on l1 norm
-            param_with_skipped_input = post_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+            param_with_skipped_input = get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned)
             sorted_layers = torch.linalg.norm(param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
             layers_not_pruned = sorted(sorted_layers[int(prune_ratio*param_with_skipped_input.shape[0]):])
             layers_pruned = sorted(sorted_layers[:int(prune_ratio*param_with_skipped_input.shape[0])])
 
             # Initialising unpruned neurons with pre-training values
             layer_data = param_with_skipped_input[layers_not_pruned, :] 
-            layer = nn.Linear(input_shape, layer_data.shape[0])
+            add_layer(unpruned_layers, input_shape, layer_data.shape[0], layer_data)
             input_shape = layer_data.shape[0]
-            with torch.no_grad():
-                layer.data = layer_data
-            unpruned_layers.append(layer)
-            unpruned_layers.append(nn.ReLU())
             #skipping every alternate relu layer
             layer_index=layer_index+2
     return nn.Sequential(*unpruned_layers)  
@@ -111,12 +109,8 @@ def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape
     for name, param in post_training_model.named_parameters():
         if 'weight' in name:
             # Not pruning the last output layer
-            if param.shape[0] == output_shape:
-                layer = nn.Linear(input_shape, output_shape)
-                with torch.no_grad():
-                    layer.data = pre_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
-                unpruned_layers.append(layer)
-                unpruned_layers.append(nn.Sigmoid())
+            if layer_index == len(post_training_model)-2:
+                add_layer(unpruned_layers, input_shape, output_shape, get_data(pre_training_model[layer_index].weight.data, param.data.shape, layers_pruned), nn.Sigmoid())
                 continue
             # Sorting the features in a layer based on l1 norm
             param_with_skipped_input = pre_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
@@ -126,12 +120,8 @@ def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape
 
             # Initialising unpruned neurons with pre-training values
             layer_data = param_with_skipped_input[layers_not_pruned, :] 
-            layer = nn.Linear(input_shape, layer_data.shape[0])
+            add_layer(unpruned_layers, input_shape, layer_data.shape[0], layer_data)
             input_shape = layer_data.shape[0]
-            with torch.no_grad():
-                layer.data = layer_data
-            unpruned_layers.append(layer)
-            unpruned_layers.append(nn.ReLU())
             #skipping every alternate relu layer
             layer_index=layer_index+2
     model = nn.Sequential(*unpruned_layers)
@@ -205,50 +195,3 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
                     index=index+2 
             criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(model.parameters(), lr=0.01)
-
-#Training the model
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
-train(model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
-torch.save(model.state_dict(), 'trained_model.pickle')
-unpruned_accuracy = calculate_accuracy(model, X_val_tensor, y_val_tensor)
-
-# Plot Accuracy vs Pruning Ratio
-pruning_ratios = np.linspace(0.1, 0.9, 20)
-itr_pruning_accuracies = []
-oneshot_pruning_reinit_accuracies = []
-oneshot_pruning_accuracies = []
-
-for prune_ratio in pruning_ratios:
-    pre_training_model_cpy = copy.deepcopy(pre_training_model)
-
-    # one-shot pruning
-    oneshot_pruned_model = oneshot_pruning(model, input_shape = 2, output_shape = 2, prune_ratio = prune_ratio)
-    train(oneshot_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
-    accuracy = calculate_accuracy(oneshot_pruned_model, X_val_tensor, y_val_tensor)
-    oneshot_pruning_accuracies.append(accuracy)
-
-    # re-initiliased one-shot pruning, pre_training_model_cpy gets pruned and udpated
-    oneshot_reinitialised_pruned_model = oneshot_pruning_reinit(model,pre_training_model_cpy, input_shape = 2, output_shape = 2, prune_ratio = prune_ratio)
-    train(oneshot_reinitialised_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
-    accuracy = calculate_accuracy(oneshot_reinitialised_pruned_model, X_val_tensor, y_val_tensor)
-    oneshot_pruning_reinit_accuracies.append(accuracy)
-
-    # iterative pruning
-    iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 100, input_shape = 2, output_shape = 2)
-    accuracy = calculate_accuracy(model, X_val_tensor, y_val_tensor)
-    itr_pruning_accuracies.append(accuracy)
-    
-plt.axhline(y = unpruned_accuracy, color = 'b', linestyle = '--')
-plt.plot(pruning_ratios, oneshot_pruning_accuracies, marker='x')
-plt.plot(pruning_ratios, oneshot_pruning_reinit_accuracies, marker='o')
-plt.plot(pruning_ratios, itr_pruning_accuracies, marker='*')
-plt.legend(["No pruning","One-shot","Re-init One-shot","Iterative"], loc ="lower right")
-plt.title("Accuracy vs. Pruning Ratio")
-plt.xlabel("Pruning Ratio")
-plt.ylabel("Accuracy")
-plt.grid()
-plt.savefig('pruning_acc_vs_pm.png')
-plt.show()
-
-
