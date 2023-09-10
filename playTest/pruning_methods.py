@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import scipy.stats as st
 
 # Defining Accuracy
 def calculate_accuracy(model, X, y):
@@ -28,6 +31,43 @@ def train(model,X_train_tensor, X_val_tensor,y_train_tensor, y_val_tensor, epoch
                 val_outputs = model(X_val_tensor)
                 val_loss = criterion(val_outputs, y_val_tensor)
                 print(f"Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}, Val Loss: {val_loss.item():.4f}")
+
+
+def reliability_diagram(mean, sigma, Y, color="blue", label="Model", marker_size=6, path="Reliability Diagram.png"):
+    fig, ax = plt.subplots()
+    df = pd.DataFrame()
+    df["mean"] = mean
+    df["sigma"] = sigma
+    df["Y"] = Y
+    df["z"] = (df["Y"] - df["mean"]) / df["sigma"]
+    df["perc"] = st.norm.cdf(df["z"])
+    print(df["perc"])
+    print(df["z"])
+    k = np.arange(0, 1.1, 0.1)
+    counts = []
+    df2 = pd.DataFrame()
+    df2["Interval"] = k
+    df2["Ideal"] = k
+    for i in range(0, 11):
+        l = df[df["perc"] < 0.5 + i * 0.05]
+        l = l[l["perc"] >= 0.5 - i * 0.05]
+        counts.append(len(l) / len(df))
+    df2["Counts"] = counts
+
+    ax.plot(k, counts, color=color, label=label)
+
+    ax.scatter(k, counts, color=color,s=marker_size)
+    ax.scatter(k, k,color="green",s=marker_size)
+    ax.set_yticks(k)
+    ax.set_xticks(k)
+    ax.set_xlim([0,1])
+    ax.set_ylim([0,1])
+    # ax.legend()
+    ax.set_xlabel("decile")
+    ax.set_ylabel("ratio of points")
+    ax.plot(k, k, color="green")
+    ax.set_title("Reliability Diagram")
+    fig.savefig(path)
 
 # Plot decision boundary
 def plot_decision_boundary(model, filename, X_train, y_train):
