@@ -177,7 +177,6 @@ def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape
         if 'weight' in name:
             model[index].weight.data = unpruned_layers[index].weight.data
             model[index].bias.data = unpruned_layers[index].bias.data
-            print(index)
             index=index+2
     return model
 
@@ -247,5 +246,6 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
                 if 'weight' in name:
                     model[index].weight.data = unpruned_layers[index].weight.data
                     model[index].bias.data = unpruned_layers[index].bias.data
+                    index=index+2
             criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(model.parameters(), lr=0.01)
