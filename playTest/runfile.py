@@ -44,7 +44,7 @@ pre_training_model = copy.deepcopy(model)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 pm.train(model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
-torch.save(model.state_dict(), 'trained_model.pickle')
+# torch.save(model.state_dict(), 'trained_model.pickle')
 unpruned_accuracy = pm.calculate_accuracy(model, X_val_tensor, y_val_tensor)
 
 # Plot Accuracy vs Pruning Ratio
@@ -54,17 +54,17 @@ itr_pruning_accuracies = []
 oneshot_pruning_reinit_accuracies = []
 oneshot_pruning_accuracies = []
 
-if os.path.exists('oneshot_pruned_model'):
-    shutil.rmtree('oneshot_pruned_model')
-os.makedirs('oneshot_pruned_model')
+# if os.path.exists('oneshot_pruned_model'):
+#     shutil.rmtree('oneshot_pruned_model')
+# os.makedirs('oneshot_pruned_model')
 
-if os.path.exists('oneshot_reinitialised_pruned_model'):
-    shutil.rmtree('oneshot_reinitialised_pruned_model')
-os.makedirs('oneshot_reinitialised_pruned_model')
+# if os.path.exists('oneshot_reinitialised_pruned_model'):
+#     shutil.rmtree('oneshot_reinitialised_pruned_model')
+# os.makedirs('oneshot_reinitialised_pruned_model')
 
-if os.path.exists('img'):
-    shutil.rmtree('img')
-os.makedirs('img')
+# if os.path.exists('img'):
+#     shutil.rmtree('img')
+# os.makedirs('img')
 
 for prune_ratio in pruning_ratios:
     pre_training_model_cpy = copy.deepcopy(pre_training_model)
@@ -74,14 +74,14 @@ for prune_ratio in pruning_ratios:
     pm.train(oneshot_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
     accuracy = pm.calculate_accuracy(oneshot_pruned_model, X_val_tensor, y_val_tensor)
     oneshot_pruning_accuracies.append(accuracy)
-    pm.plot_decision_boundary(oneshot_pruned_model, 'oneshot_pruned_model/'+f'{prune_ratio*10}'[:3] +'.png', X_train, y_train)
+    #pm.plot_decision_boundary(oneshot_pruned_model, 'oneshot_pruned_model/'+f'{prune_ratio*10}'[:3] +'.png', X_train, y_train)
 
     # re-initiliased one-shot pruning, pre_training_model_cpy gets pruned and udpated
     oneshot_reinitialised_pruned_model = pm.oneshot_pruning_reinit(model,pre_training_model_cpy, input_shape = 2, output_shape = 2, prune_ratio = prune_ratio)
     pm.train(oneshot_reinitialised_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
     accuracy = pm.calculate_accuracy(oneshot_reinitialised_pruned_model, X_val_tensor, y_val_tensor)
     oneshot_pruning_reinit_accuracies.append(accuracy)
-    pm.plot_decision_boundary(oneshot_reinitialised_pruned_model, 'oneshot_reinitialised_pruned_model/'+ f'{prune_ratio*10}'[:3]+'.png', X_train, y_train)
+    #pm.plot_decision_boundary(oneshot_reinitialised_pruned_model, 'oneshot_reinitialised_pruned_model/'+ f'{prune_ratio*10}'[:3]+'.png', X_train, y_train)
 
     # iterative pruning
     pm.iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 100, input_shape = 2, output_shape = 2)
@@ -100,18 +100,18 @@ plt.xlabel("Pruning Ratio")
 plt.ylabel("Accuracy")
 plt.grid()
 plt.savefig('img/pruning_acc_vs_pm.png')
-# plt.show()
+plt.show()
 
-import glob
-from PIL import Image
+# import glob
+# from PIL import Image
 
 
-def make_gif(frame_folder, filename):
-    frames = [Image.open(image) for image in sorted(glob.glob(f"{frame_folder}/*.png"))]
-    frame_one = frames[0]
-    frame_one.save(f"{filename}.gif", format="GIF", append_images=frames,
-               save_all=True, duration=400, loop=1)
+# def make_gif(frame_folder, filename):
+#     frames = [Image.open(image) for image in sorted(glob.glob(f"{frame_folder}/*.png"))]
+#     frame_one = frames[0]
+#     frame_one.save(f"{filename}.gif", format="GIF", append_images=frames,
+#                save_all=True, duration=400, loop=1)
     
 
-make_gif("oneshot_pruned_model", "img/oneshot_pruned_model")
-make_gif("oneshot_reinitialised_pruned_model", "img/oneshot_reinitialised_pruned_model")
+# make_gif("oneshot_pruned_model", "img/oneshot_pruned_model")
+# make_gif("oneshot_reinitialised_pruned_model", "img/oneshot_reinitialised_pruned_model")

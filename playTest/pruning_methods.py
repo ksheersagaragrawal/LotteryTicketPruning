@@ -102,12 +102,13 @@ def plot_decision_boundary(model, filename, X_train, y_train):
 def get_data(weight_data, layer_shape, layers_pruned):
     return weight_data[:, [col for col in range(layer_shape[1]) if col not in layers_pruned]]
 
-def add_layer(unpruned_layers, input_shape, output_shape, layer_data, activation = nn.ReLU()):
-	layer = nn.Linear(input_shape, output_shape)
-	with torch.no_grad():
-		layer.data = layer_data
-	unpruned_layers.append(layer)
-	unpruned_layers.append(activation)
+def add_layer(unpruned_layers, input_shape, output_shape, layer_wt_data, layer_bias_data, activation=nn.ReLU()):
+    layer = nn.Linear(input_shape, output_shape)
+    with torch.no_grad():
+        layer.weight.data = layer_wt_data
+        layer.bias.data = layer_bias_data
+    unpruned_layers.append(layer)
+    unpruned_layers.append(activation)
 
 # One-shotPrune the model
 
@@ -122,18 +123,21 @@ def oneshot_pruning( post_training_model, input_shape, output_shape, prune_ratio
             # Not pruning the last output layer
             # if param.shape[0] == output_shape:
             if layer_index == len(post_training_model)-2:
-                add_layer(unpruned_layers, input_shape, output_shape, get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned), nn.Sigmoid())
+                add_layer(unpruned_layers, input_shape, output_shape, get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned),post_training_model[layer_index].bias.data, nn.Sigmoid())
                 continue
             # Sorting the features in a layer based on l1 norm
-            param_with_skipped_input = get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned)
-            sorted_layers = torch.linalg.norm(param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
-            layers_not_pruned = sorted(sorted_layers[int(prune_ratio*param_with_skipped_input.shape[0]):])
-            layers_pruned = sorted(sorted_layers[:int(prune_ratio*param_with_skipped_input.shape[0])])
+            wt_param_with_skipped_input = get_data(post_training_model[layer_index].weight.data, param.data.shape, layers_pruned)
+            bias_param_with_skipped_input = post_training_model[layer_index].bias.data
+            sorted_layers = torch.linalg.norm(wt_param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
+            layers_not_pruned = sorted(sorted_layers[int(prune_ratio*wt_param_with_skipped_input.shape[0]):])
+            layers_pruned = sorted(sorted_layers[:int(prune_ratio*wt_param_with_skipped_input.shape[0])])
+            layers_not_pruned_indices = torch.tensor([tensor.item() for tensor in layers_not_pruned])
 
             # Initialising unpruned neurons with pre-training values
-            layer_data = param_with_skipped_input[layers_not_pruned, :] 
-            add_layer(unpruned_layers, input_shape, layer_data.shape[0], layer_data)
-            input_shape = layer_data.shape[0]
+            layer_wt_data = wt_param_with_skipped_input[layers_not_pruned, :]
+            layer_bias_data = bias_param_with_skipped_input[layers_not_pruned_indices]
+            add_layer(unpruned_layers, input_shape, layer_wt_data.shape[0], layer_wt_data, layer_bias_data)
+            input_shape = layer_wt_data.shape[0]
             #skipping every alternate relu layer
             layer_index=layer_index+2
     return nn.Sequential(*unpruned_layers)  
@@ -150,25 +154,30 @@ def oneshot_pruning_reinit( post_training_model, pre_training_model, input_shape
         if 'weight' in name:
             # Not pruning the last output layer
             if layer_index == len(post_training_model)-2:
-                add_layer(unpruned_layers, input_shape, output_shape, get_data(pre_training_model[layer_index].weight.data, param.data.shape, layers_pruned), nn.Sigmoid())
+                add_layer(unpruned_layers, input_shape, output_shape, get_data(pre_training_model[layer_index].weight.data, param.data.shape, layers_pruned),pre_training_model[layer_index].bias.data, nn.Sigmoid())
                 continue
             # Sorting the features in a layer based on l1 norm
-            param_with_skipped_input = pre_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
-            sorted_layers = torch.linalg.norm(param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
-            layers_not_pruned = sorted(sorted_layers[int(prune_ratio*param_with_skipped_input.shape[0]):])
-            layers_pruned = sorted(sorted_layers[:int(prune_ratio*param_with_skipped_input.shape[0])])
+            wt_param_with_skipped_input = pre_training_model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+            bias_param_with_skipped_input = pre_training_model[layer_index].bias.data
+            sorted_layers = torch.linalg.norm(wt_param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
+            layers_not_pruned = sorted(sorted_layers[int(prune_ratio*wt_param_with_skipped_input.shape[0]):])
+            layers_pruned = sorted(sorted_layers[:int(prune_ratio*wt_param_with_skipped_input.shape[0])])
+            layers_not_pruned_indices = torch.tensor([tensor.item() for tensor in layers_not_pruned])
 
             # Initialising unpruned neurons with pre-training values
-            layer_data = param_with_skipped_input[layers_not_pruned, :] 
-            add_layer(unpruned_layers, input_shape, layer_data.shape[0], layer_data)
-            input_shape = layer_data.shape[0]
+            layer_wt_data = wt_param_with_skipped_input[layers_not_pruned, :]
+            layer_bias_data = bias_param_with_skipped_input[layers_not_pruned_indices]
+            add_layer(unpruned_layers, input_shape, layer_wt_data.shape[0], layer_wt_data, layer_bias_data)
+            input_shape = layer_wt_data.shape[0]
             #skipping every alternate relu layer
             layer_index=layer_index+2
     model = nn.Sequential(*unpruned_layers)
     index = 0
     for name, param in model.named_parameters():
         if 'weight' in name:
-            param.data = unpruned_layers[index].data
+            model[index].weight.data = unpruned_layers[index].weight.data
+            model[index].bias.data = unpruned_layers[index].bias.data
+            print(index)
             index=index+2
     return model
 
@@ -207,22 +216,27 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
                     if param.shape[0] == output_shape:
                         layer = nn.Linear(input_shape, output_shape)
                         with torch.no_grad():
-                            layer.data = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+                            layer.weight.data = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+                            layer.bias.data = model[layer_index].bias.data
                         unpruned_layers.append(layer)
                         unpruned_layers.append(nn.Sigmoid())
                         continue
                     # Sorting the features in a layer based on l1 norm
-                    param_with_skipped_input = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
-                    sorted_layers = torch.linalg.norm(param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
-                    layers_not_pruned = sorted(sorted_layers[int(per_round_prune_ratio*param_with_skipped_input.shape[0]):])
-                    layers_pruned = sorted(sorted_layers[:int(per_round_prune_ratio*param_with_skipped_input.shape[0])])
+                    wt_param_with_skipped_input = model[layer_index].weight.data[:, [col for col in range(param.data.shape[1]) if col not in layers_pruned]]
+                    bias_param_with_skipped_input = model[layer_index].bias.data
+                    sorted_layers = torch.linalg.norm(wt_param_with_skipped_input, ord=1, dim=1).argsort(dim=-1)
+                    layers_not_pruned = sorted(sorted_layers[int(per_round_prune_ratio*wt_param_with_skipped_input.shape[0]):])
+                    layers_pruned = sorted(sorted_layers[:int(per_round_prune_ratio*wt_param_with_skipped_input.shape[0])])
+                    layers_not_pruned_indices = torch.tensor([tensor.item() for tensor in layers_not_pruned])
 
                     # Initialising unpruned neurons with pre-training values
-                    layer_data = param_with_skipped_input[layers_not_pruned, :] 
-                    layer = nn.Linear(input_shape, layer_data.shape[0])
-                    input_shape = layer_data.shape[0]
+                    layer_wt_data = wt_param_with_skipped_input[layers_not_pruned, :]
+                    layer_bias_data = bias_param_with_skipped_input[layers_not_pruned_indices] 
+                    layer = nn.Linear(input_shape, layer_wt_data.shape[0])
+                    input_shape = layer_wt_data.shape[0]
                     with torch.no_grad():
-                        layer.data = layer_data
+                        layer.weight.data = layer_wt_data
+                        layer.bias.data = layer_bias_data
                     unpruned_layers.append(layer)
                     unpruned_layers.append(nn.ReLU())
                     #skipping every alternate relu layer
@@ -231,7 +245,7 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
             index = 0
             for name, param in model.named_parameters():
                 if 'weight' in name:
-                    param.data = unpruned_layers[index].data
-                    index=index+2 
+                    model[index].weight.data = unpruned_layers[index].weight.data
+                    model[index].bias.data = unpruned_layers[index].bias.data
             criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(model.parameters(), lr=0.01)
