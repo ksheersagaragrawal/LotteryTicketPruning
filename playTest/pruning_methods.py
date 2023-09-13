@@ -110,6 +110,36 @@ def add_layer(unpruned_layers, input_shape, output_shape, layer_wt_data, layer_b
     unpruned_layers.append(layer)
     unpruned_layers.append(activation)
 
+def expected_calibration_error_multi(samples, true_labels, M=3):
+    # uniform binning approach with M number of bins
+    bin_boundaries = np.linspace(0, 1, M + 1)
+    bin_lowers = bin_boundaries[:-1]
+    bin_uppers = bin_boundaries[1:]
+
+    confidences = np.max(samples, axis=1)               
+    # get predictions from confidences (positional in this case)
+    predicted_label = np.argmax(samples, axis=1).astype(float)
+
+    # get a boolean list of correct/false predictions
+    accuracies = predicted_label==true_labels
+
+    ece = np.zeros(1)
+    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+        # determine if sample is in bin m (between bin lower & upper)
+        in_bin = np.logical_and(confidences > bin_lower.item(), confidences <= bin_upper.item())
+        # can calculate the empirical probability of a sample falling into bin m: (|Bm|/n)
+        prop_in_bin = in_bin.astype(float).mean()
+
+        if prop_in_bin.item() > 0:
+            # get the accuracy of bin m: acc(Bm)
+            accuracy_in_bin = accuracies[in_bin].astype(float).mean()
+            # get the average confidence of bin m: conf(Bm)
+            avg_confidence_in_bin = confidences[in_bin].mean()
+            # calculate |acc(Bm) - conf(Bm)| * (|Bm|/n) for bin m and add to the total ECE
+            ece += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+    return ece
+
+
 # One-shotPrune the model
 
 # In this method, we prune prune_ratio fatures in each layer
@@ -240,12 +270,15 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
                     unpruned_layers.append(nn.ReLU())
                     #skipping every alternate relu layer
                     layer_index=layer_index+2
-            model = nn.Sequential(*unpruned_layers)
+            
+            pruned_model = nn.Sequential(*unpruned_layers)
             index = 0
-            for name, param in model.named_parameters():
+            for name, param in pruned_model.named_parameters():
                 if 'weight' in name:
-                    model[index].weight.data = unpruned_layers[index].weight.data
-                    model[index].bias.data = unpruned_layers[index].bias.data
+                    pruned_model[index].weight.data = unpruned_layers[index].weight.data
+                    pruned_model[index].bias.data = unpruned_layers[index].bias.data
                     index=index+2
             criterion = nn.CrossEntropyLoss()
-            optimizer = optim.Adam(model.parameters(), lr=0.01)
+            optimizer = optim.Adam(pruned_model.parameters(), lr=0.01)
+
+            return pruned_model

@@ -9,7 +9,7 @@ import shutil, os
 from sklearn.datasets import make_circles
 from sklearn.model_selection import train_test_split
 
-
+torch.manual_seed(142)
 # Create a circles dataset
 X, y = make_circles(n_samples=1000, factor=0.5, noise=0.1, random_state=42)
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -46,6 +46,8 @@ optimizer = optim.Adam(model.parameters(), lr=0.01)
 pm.train(model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
 # torch.save(model.state_dict(), 'trained_model.pickle')
 unpruned_accuracy = pm.calculate_accuracy(model, X_val_tensor, y_val_tensor)
+pm.plot_decision_boundary(model, 'img/unpruned_model.png', X_train, y_train)
+ece_unpruned = pm.expected_calibration_error_multi(model(X_train_tensor).detach().numpy(), y_train_tensor.detach().numpy(), 10)
 
 # Plot Accuracy vs Pruning Ratio
 num_prune_iter = 20
@@ -53,7 +55,7 @@ pruning_ratios = np.linspace(0.1, 0.9, num_prune_iter)
 itr_pruning_accuracies = []
 oneshot_pruning_reinit_accuracies = []
 oneshot_pruning_accuracies = []
-
+ece = []
 # if os.path.exists('oneshot_pruned_model'):
 #     shutil.rmtree('oneshot_pruned_model')
 # os.makedirs('oneshot_pruned_model')
@@ -68,12 +70,14 @@ oneshot_pruning_accuracies = []
 
 for prune_ratio in pruning_ratios:
     pre_training_model_cpy = copy.deepcopy(pre_training_model)
+    ece.append([])
 
     # one-shot pruning
     oneshot_pruned_model = pm.oneshot_pruning(model, input_shape = 2, output_shape = 2, prune_ratio = prune_ratio)
     pm.train(oneshot_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
     accuracy = pm.calculate_accuracy(oneshot_pruned_model, X_val_tensor, y_val_tensor)
     oneshot_pruning_accuracies.append(accuracy)
+    ece[-1].append(pm.expected_calibration_error_multi(oneshot_pruned_model(X_train_tensor).detach().numpy(), y_train_tensor.detach().numpy(), 10))
     #pm.plot_decision_boundary(oneshot_pruned_model, 'oneshot_pruned_model/'+f'{prune_ratio*10}'[:3] +'.png', X_train, y_train)
 
     # re-initiliased one-shot pruning, pre_training_model_cpy gets pruned and udpated
@@ -81,12 +85,14 @@ for prune_ratio in pruning_ratios:
     pm.train(oneshot_reinitialised_pruned_model,X_train_tensor,X_val_tensor, y_train_tensor, y_val_tensor, epochs = 100)
     accuracy = pm.calculate_accuracy(oneshot_reinitialised_pruned_model, X_val_tensor, y_val_tensor)
     oneshot_pruning_reinit_accuracies.append(accuracy)
+    ece[-1].append(pm.expected_calibration_error_multi(oneshot_reinitialised_pruned_model(X_train_tensor).detach().numpy(), y_train_tensor.detach().numpy(), 10))
     #pm.plot_decision_boundary(oneshot_reinitialised_pruned_model, 'oneshot_reinitialised_pruned_model/'+ f'{prune_ratio*10}'[:3]+'.png', X_train, y_train)
 
     # iterative pruning
-    pm.iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 100, input_shape = 2, output_shape = 2)
+    itr_pruned_model = pm.iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 100, input_shape = 2, output_shape = 2)
     accuracy = pm.calculate_accuracy(model, X_val_tensor, y_val_tensor)
     itr_pruning_accuracies.append(accuracy)
+    ece[-1].append(pm.expected_calibration_error_multi(itr_pruned_model(X_train_tensor).detach().numpy(), y_train_tensor.detach().numpy(), 10))
     # plot_decision_boundary(oneshot_reinitialised_pruned_model, 'oneshot_reinitialised_pruned_model/'+ f'{prune_ratio*10}'[:3]+'.png')
 
 plt.figure().clear()
@@ -100,7 +106,18 @@ plt.xlabel("Pruning Ratio")
 plt.ylabel("Accuracy")
 plt.grid()
 plt.savefig('img/pruning_acc_vs_pm.png')
-plt.show()
+
+plt.figure().clear()
+plt.plot(pruning_ratios, [ece[i][0] for i in range(len(ece))], marker='x')
+plt.plot(pruning_ratios, [ece[i][1] for i in range(len(ece))], marker='o')
+plt.plot(pruning_ratios, [ece[i][2] for i in range(len(ece))], marker='s')
+plt.axhline(y = ece_unpruned, color = 'b', linestyle = '--')
+plt.title("ECE vs. Pruning Ratio")
+plt.legend(["One-shot","Re-init One-shot", "Iterative", "Unpruned"], loc ="upper left")
+plt.xlabel("Pruning Ratio")
+plt.ylabel("ECE")
+plt.grid()
+plt.savefig('img/pruning_ece_vs_pm.png')
 
 # import glob
 # from PIL import Image
