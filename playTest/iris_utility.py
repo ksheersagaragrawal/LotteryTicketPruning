@@ -26,35 +26,35 @@ def train(model,X_train_tensor, X_val_tensor,y_train_tensor, y_val_tensor, epoch
         loss.backward()
         optimizer.step()
 
-# Plot decision boundary
-def plot_decision_boundary(model, filename, X_train, y_train):
-    x = torch.linspace(-1.5, 1.5, 1000)
-    y = torch.linspace(-1.5, 1.5, 1000)
-    xv, yv = torch.meshgrid(x, y)
 
-    # Reshape xv and yv
-    xv = xv.reshape(-1)
-    yv = yv.reshape(-1)
+def expected_calibration_error_multi(samples, true_labels, M=3):
+    # uniform binning approach with M number of bins
+    bin_boundaries = np.linspace(0, 1, M + 1)
+    bin_lowers = bin_boundaries[:-1]
+    bin_uppers = bin_boundaries[1:]
 
-    # Stack xv and yv into a tensor
-    grid = torch.stack((xv, yv), dim=1)
-    # Feed the grid tensor into the model
+    confidences = np.max(samples, axis=1)               
+    # get predictions from confidences (positional in this case)
+    predicted_label = np.argmax(samples, axis=1).astype(float)
 
-    model.eval()
-    with torch.no_grad():
-        outputs = model(grid)
-        
-    # Get the predicted class
-    _, y_pred = torch.max(outputs, 1)
-    
-    fig, ax = plt.subplots(figsize=(5, 5))
+    # get a boolean list of correct/false predictions
+    accuracies = predicted_label==true_labels
 
+    ece = np.zeros(1)
+    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+        # determine if sample is in bin m (between bin lower & upper)
+        in_bin = np.logical_and(confidences > bin_lower.item(), confidences <= bin_upper.item())
+        # can calculate the empirical probability of a sample falling into bin m: (|Bm|/n)
+        prop_in_bin = in_bin.astype(float).mean()
 
-    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, s=10, cmap=plt.cm.RdBu)
-    im = ax.contourf(x, y, y_pred.reshape(1000, 1000), alpha=0.3, cmap=plt.cm.RdBu)
-    ax.set_title(f"Decision Boundary {filename}")
-    plt.colorbar(im , ax=ax)
-    fig.savefig(filename)
+        if prop_in_bin.item() > 0:
+            # get the accuracy of bin m: acc(Bm)
+            accuracy_in_bin = accuracies[in_bin].astype(float).mean()
+            # get the average confidence of bin m: conf(Bm)
+            avg_confidence_in_bin = confidences[in_bin].mean()
+            # calculate |acc(Bm) - conf(Bm)| * (|Bm|/n) for bin m and add to the total ECE
+            ece += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+    return ece
 
 def get_data(weight_data, layer_shape, layers_pruned):
     return weight_data[:, [col for col in range(layer_shape[1]) if col not in layers_pruned]]
@@ -196,12 +196,14 @@ def iterative_pruning(model, X_train_tensor, y_train_tensor, prune_ratio, prune_
                     unpruned_layers.append(nn.ReLU())
                     #skipping every alternate relu layer
                     layer_index=layer_index+2
-            model = nn.Sequential(*unpruned_layers)
+            pruned_model = nn.Sequential(*unpruned_layers)
             index = 0
-            for name, param in model.named_parameters():
+            for name, param in pruned_model.named_parameters():
                 if 'weight' in name:
-                    model[index].weight.data = unpruned_layers[index].weight.data
-                    model[index].bias.data = unpruned_layers[index].bias.data
+                    pruned_model[index].weight.data = unpruned_layers[index].weight.data
+                    pruned_model[index].bias.data = unpruned_layers[index].bias.data
                     index=index+2
             criterion = nn.CrossEntropyLoss()
-            optimizer = optim.Adam(model.parameters(), lr=0.01)
+            optimizer = optim.Adam(pruned_model.parameters(), lr=0.01)
+
+            return pruned_model
