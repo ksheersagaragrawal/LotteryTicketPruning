@@ -35,7 +35,7 @@ class MLP(nn.Module):
 
     def update_layers(self, new_layers):
         for i, new_layer in enumerate(new_layers):
-            if hasattr(self, f'fc{i + 1}'):  
+            if hasattr(self, f'fc{i + 1}'):
                 setattr(self, f'fc{i + 1}', new_layer)
 
     def forward(self, x):
@@ -45,12 +45,12 @@ class MLP(nn.Module):
         x = self.fc2(x)
         return x
    
-
 # Initialize the model, optimizer, criterion & train the model
 model = MLP()      
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 criterion = nn.CrossEntropyLoss()
 epochs = 10
+untrained_model = copy.deepcopy(model)
 ut.train(model, train_loader, criterion, optimizer, epochs = 10)
 
 # Evaluation on the test set
@@ -64,9 +64,22 @@ num_prune_iter = 10
 pruning_ratios = np.linspace(0.1, 0.9, num_prune_iter)
 oneshot_pruning_accuracies = []
 oneshot_pruning_ece = []
+oneshot_reinit_pruning_accuracies = []
+oneshot_reinit_pruning_ece = []
+oneshot_random_reinit_pruning_accuracies = []
+oneshot_random_reinit_pruning_ece = []
+iterative_pruning_accuracies = []
+iterative_pruning_ece = []
 
 for prune_ratio in pruning_ratios:
 
+     # Iterative pruning accuracy
+    iterative_pruning_model = copy.deepcopy(untrained_model)
+    iterative_pruning_model = ut.iterative_pruning(iterative_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
+    iterative_pruning_accuracies.append(ut.calculate_accuracy(iterative_pruning_model, test_loader))
+    # Iterative pruning ECE
+    iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader))
+    
     # One-shot pruning accuracy
     one_shot_model = copy.deepcopy(model)
     unpruned_layers = ut.oneshot_pruning(one_shot_model, input_shape = 28*28, output_shape = 10, prune_ratio = prune_ratio)
@@ -75,11 +88,37 @@ for prune_ratio in pruning_ratios:
     # One-shot pruning ECE
     oneshot_pruning_ece.append(ut.expected_calibration_error(one_shot_model, test_loader))
 
+    # One-shot reinit pruning accuracy
+    one_shot_reinit_model = copy.deepcopy(model)
+    unpruned_layers = ut.oneshot_reinit_pruning(one_shot_reinit_model, untrained_model, input_shape = 28*28, output_shape = 10, prune_ratio = prune_ratio)
+    one_shot_reinit_model.update_layers(unpruned_layers)
+    # Retrain the model
+    ut.train(one_shot_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
+    oneshot_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_reinit_model, test_loader))
+    # One-shot pruning ECE
+    oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader))
+
+    # One-shot random reinit pruning accuracy
+    torch.manual_seed(19)
+    random_model = MLP()
+    torch.manual_seed(42)
+    one_shot_random_reinit_model = copy.deepcopy(model)
+    unpruned_layers = ut.oneshot_reinit_pruning(one_shot_random_reinit_model, random_model, input_shape = 28*28, output_shape = 10, prune_ratio = prune_ratio)
+    one_shot_random_reinit_model.update_layers(unpruned_layers)
+    # Retrain the model
+    ut.train(one_shot_random_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
+    oneshot_random_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_random_reinit_model, test_loader))
+    # One-shot pruning ECE
+    oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader))
+
 # Plot Accuracy vs Pruning Ratio
 plt.figure().clear()
 plt.axhline(y = unpruned_accuracy, color = 'b', linestyle = '--')
 plt.plot(pruning_ratios, oneshot_pruning_accuracies, marker='x')
-plt.legend(["No pruning","One-shot"], loc ="lower right")
+plt.plot(pruning_ratios, oneshot_reinit_pruning_accuracies, marker='o')
+plt.plot(pruning_ratios, oneshot_random_reinit_pruning_accuracies, marker='*')
+plt.plot(pruning_ratios, iterative_pruning_accuracies, marker='.')
+plt.legend(["No pruning","One-shot","One-shot Reinit", "One-shot Random Reinit","Iterative"], loc ="lower left")
 plt.title("Accuracy vs. Pruning Ratio")
 plt.xlabel("Pruning Ratio")
 plt.ylabel("Accuracy")
@@ -90,7 +129,10 @@ plt.savefig('results/acc_vs_pm.png')
 plt.figure().clear()
 plt.axhline(y = unpruned_ece, color = 'b', linestyle = '--')
 plt.plot(pruning_ratios, oneshot_pruning_ece, marker='x')
-plt.legend(["No pruning","One-shot"], loc ="lower right")
+plt.plot(pruning_ratios, oneshot_reinit_pruning_ece, marker='o')
+plt.plot(pruning_ratios, oneshot_random_reinit_pruning_ece, marker='*')
+plt.plot(pruning_ratios, iterative_pruning_ece, marker='.')
+plt.legend(["No pruning","One-shot","One-shot Reinit", "One-shot Random Reinit","Iterative"], loc ="upper left")
 plt.title("Expected Calibration Error (ECE) vs. Pruning Ratio")
 plt.xlabel("Pruning Ratio")
 plt.ylabel("ECE")
