@@ -44,7 +44,7 @@ def add_layer(unpruned_layers, input_shape, output_shape, layer_wt_data, layer_b
     unpruned_layers.append(layer)
 
 
-def expected_calibration_error(model, test_loader, M=3):
+def expected_calibration_error(model, test_loader, M=10):
     # uniform binning approach with M number of bins
     bin_boundaries = np.linspace(0, 1, M + 1)
     bin_lowers = bin_boundaries[:-1]
