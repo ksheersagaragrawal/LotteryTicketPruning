@@ -13,8 +13,8 @@ import util as ut
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
 # Load the MNIST dataset
-train_dataset = datasets.MNIST(root='../MNIST', train=True, transform=transform, download=True)
-test_dataset = datasets.MNIST(root='../MNIST', train=False, transform=transform, download=True)
+train_dataset = datasets.MNIST(root='./MNIST', train=True, transform=transform, download=True)
+test_dataset = datasets.MNIST(root='./MNIST', train=False, transform=transform, download=True)
 
 # Create data loaders for batching and shuffling
 batch_size = 64
@@ -56,12 +56,12 @@ ut.train(model, train_loader, criterion, optimizer, epochs = 10)
 # Evaluation on the test set
 unpruned_accuracy = ut.calculate_accuracy(model, test_loader)
 print(f"Accuracy on the test set: {unpruned_accuracy}%")
-unpruned_ece = ut.expected_calibration_error(model, test_loader)
+unpruned_ece = ut.expected_calibration_error(model, test_loader,'results//unpruned/unpruned.png')
 print(f"ECE on the test set (Unpruned): {unpruned_ece}")
 
 # Plot Accuracy vs Pruning Ratio
 num_prune_iter = 10
-pruning_ratios = np.linspace(0.1, 0.9, num_prune_iter)
+pruning_ratios = np.linspace(0, 0.9, num_prune_iter)
 oneshot_pruning_accuracies = []
 oneshot_pruning_ece = []
 oneshot_reinit_pruning_accuracies = []
@@ -78,7 +78,7 @@ for prune_ratio in pruning_ratios:
     iterative_pruning_model = ut.iterative_pruning(iterative_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
     iterative_pruning_accuracies.append(ut.calculate_accuracy(iterative_pruning_model, test_loader))
     # Iterative pruning ECE
-    iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader))
+    iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader,'results/iterative/iterative'+str(prune_ratio)+'.png'))
     
     # One-shot pruning accuracy
     one_shot_model = copy.deepcopy(model)
@@ -86,7 +86,7 @@ for prune_ratio in pruning_ratios:
     one_shot_model.update_layers(unpruned_layers)
     oneshot_pruning_accuracies.append(ut.calculate_accuracy(one_shot_model, test_loader))
     # One-shot pruning ECE
-    oneshot_pruning_ece.append(ut.expected_calibration_error(one_shot_model, test_loader))
+    oneshot_pruning_ece.append(ut.expected_calibration_error(one_shot_model, test_loader,'results//oneshot/oneshot'+str(prune_ratio)+'.png'))
 
     # One-shot reinit pruning accuracy
     one_shot_reinit_model = copy.deepcopy(model)
@@ -96,7 +96,7 @@ for prune_ratio in pruning_ratios:
     ut.train(one_shot_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
     oneshot_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_reinit_model, test_loader))
     # One-shot pruning ECE
-    oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader))
+    oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader, 'results/oneshotreinit/oneshotreinit'+str(prune_ratio)+'.png'))
 
     # One-shot random reinit pruning accuracy
     torch.manual_seed(19)
@@ -109,7 +109,7 @@ for prune_ratio in pruning_ratios:
     ut.train(one_shot_random_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
     oneshot_random_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_random_reinit_model, test_loader))
     # One-shot pruning ECE
-    oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader))
+    oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader, 'results/oneshotrandomreinit/oneshotrandomreinit'+str(prune_ratio)+'.png'))
 
 # Plot Accuracy vs Pruning Ratio
 plt.figure().clear()

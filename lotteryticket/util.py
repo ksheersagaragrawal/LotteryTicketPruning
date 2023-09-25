@@ -2,6 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
+import pandas as pd
+import torch.nn.functional as F
+
 
 
 # Defining Accuracy
@@ -43,41 +47,42 @@ def add_layer(unpruned_layers, input_shape, output_shape, layer_wt_data, layer_b
         layer.bias.data = layer_bias_data
     unpruned_layers.append(layer)
 
-
-def expected_calibration_error(model, test_loader, M=10):
+def expected_calibration_error(model, test_loader, title, M=20):
     # uniform binning approach with M number of bins
     bin_boundaries = np.linspace(0, 1, M + 1)
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
-    predicted_label = []
+    predicted_labels = []
     true_labels = []
     confidences = []
+    reliabilities = []
+
    # keep confidences / predicted "probabilities" as they are
     model.eval()
     with torch.no_grad():
         for data, target in test_loader:
             output = model(data)
+            output = F.softmax(output, dim=1)
             _, predicted = torch.max(output.data, 1)
-            predicted_label.append(predicted)
+            predicted_labels.append(predicted)
             true_labels.append(target)
             confidences.append(_)
 
     # get binary class predictions from confidences
-    predicted_label = torch.cat(predicted_label).numpy()
+    predicted_labels = torch.cat(predicted_labels).numpy()
     true_labels = torch.cat(true_labels).numpy()
     confidences = torch.cat(confidences).numpy()
-    
-    true_labels = (true_labels==predicted_label).astype(int) 
+
     # get a boolean list of correct/false predictions
-    accuracies = predicted_label==true_labels
+    accuracies = predicted_labels==true_labels   
 
     ece = np.zeros(1)
     for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
         # determine if sample is in bin m (between bin lower & upper)
         in_bin = np.logical_and(confidences > bin_lower.item(), confidences <= bin_upper.item())
         # can calculate the empirical probability of a sample falling into bin m: (|Bm|/n)
-        prop_in_bin = in_bin.astype(float).mean()
-
+        prop_in_bin = in_bin.astype(float).mean()    
+             
         if prop_in_bin.item() > 0:
             # get the accuracy of bin m: acc(Bm)
             accuracy_in_bin = accuracies[in_bin].astype(float).mean()
@@ -85,6 +90,20 @@ def expected_calibration_error(model, test_loader, M=10):
             avg_confidence_in_bin = confidences[in_bin].mean()
             # calculate |acc(Bm) - conf(Bm)| * (|Bm|/n) for bin m and add to the total ECE
             ece += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+            bin_accuracy = np.mean(true_labels[in_bin]==predicted_labels[in_bin])
+            reliabilities.append(bin_accuracy)
+        else:
+            reliabilities.append(0.0)  # Avoid division by zero
+
+    # Plot the reliability diagram
+    plt.figure(figsize=(6, 6))
+    plt.plot([0, 1], [0, 1], linestyle="--", color="gray")  # Diagonal reference line
+    plt.plot(np.linspace(0, 1, M), reliabilities, marker="o", linestyle="-", color="blue")
+    plt.xlabel("Mean Predicted Probability")
+    plt.ylabel("Empirical Accuracy")
+    plt.title(f"Reliability Diagram (ECE = {ece[0]:.4f})")
+    plt.grid(True)
+    plt.savefig(title)
     return ece
 
 # In this method, we prune prune_ratio fatures in each layer
