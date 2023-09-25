@@ -13,8 +13,8 @@ import util as ut
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
 # Load the MNIST dataset
-train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
-test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
+train_dataset = datasets.MNIST(root='../MNIST', train=True, transform=transform, download=True)
+test_dataset = datasets.MNIST(root='../MNIST', train=False, transform=transform, download=True)
 
 # Create data loaders for batching and shuffling
 batch_size = 64
