@@ -13,8 +13,8 @@ import util as ut
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
 # Load the MNIST dataset
-train_dataset = datasets.FashionMNIST(root='./FashionMNIST', train=True, transform=transform, download=True)
-test_dataset = datasets.FashionMNIST(root='./FashionMNIST', train=False, transform=transform, download=True)
+train_dataset = datasets.MNIST(root='./MNIST', train=True, transform=transform, download=True)
+test_dataset = datasets.MNIST(root='./MNIST', train=False, transform=transform, download=True)
 
 # Create data loaders for batching and shuffling
 batch_size = 64
@@ -56,7 +56,7 @@ ut.train(model, train_loader, criterion, optimizer, epochs = 10)
 # Evaluation on the test set
 unpruned_accuracy = ut.calculate_accuracy(model, test_loader)
 print(f"Accuracy on the test set: {unpruned_accuracy}%")
-unpruned_ece = ut.expected_calibration_error(model, test_loader,'results/FashionMNIST/unpruned/unpruned.png')
+unpruned_ece = ut.expected_calibration_error(model, test_loader,'results/MNIST/unpruned/unpruned.png')
 print(f"ECE on the test set (Unpruned): {unpruned_ece}")
 
 # Iterative pruning Lottery Ticket Hypothesis
@@ -99,14 +99,14 @@ for prune_ratio in pruning_ratios:
     iterative_pruning_model = ut.iterative_pruning(iterative_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
     iterative_pruning_accuracies.append(ut.calculate_accuracy(iterative_pruning_model, test_loader))
     # Iterative pruning ECE
-    iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader,'results/FashionMNIST/iterative/iterative'+str(prune_ratio)+'.png'))
+    iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader,'results/MNIST/iterative/iterative'+str(prune_ratio)+'.png'))
 
     # Iterative pruning strategy 2 accuracy
     iterative_reinit_pruning_model = copy.deepcopy(untrained_model)
     iterative_reinit_pruning_model = iterative_reinit_pruning(iterative_reinit_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
     iterative_reinit_pruning_accuracies.append(ut.calculate_accuracy(iterative_reinit_pruning_model, test_loader))
     # Iterative pruning ECE
-    iterative_reinit_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader,'results/FashionMNIST/iterative_reinit/iterative_reinit'+str(prune_ratio)+'.png'))
+    iterative_reinit_pruning_ece.append(ut.expected_calibration_error(iterative_reinit_pruning_model, test_loader,'results/MNIST/iterative_reinit/iterative_reinit'+str(prune_ratio)+'.png'))
     
     # One-shot pruning accuracy
     one_shot_model = copy.deepcopy(model)
@@ -114,7 +114,7 @@ for prune_ratio in pruning_ratios:
     one_shot_model.update_layers(unpruned_layers)
     oneshot_pruning_accuracies.append(ut.calculate_accuracy(one_shot_model, test_loader))
     # One-shot pruning ECE
-    oneshot_pruning_ece.append(ut.expected_calibration_error(one_shot_model, test_loader,'results/FashionMNIST/oneshot/oneshot'+str(prune_ratio)+'.png'))
+    oneshot_pruning_ece.append(ut.expected_calibration_error(one_shot_model, test_loader,'results/MNIST/oneshot/oneshot'+str(prune_ratio)+'.png'))
 
     # One-shot reinit pruning accuracy
     one_shot_reinit_model = copy.deepcopy(model)
@@ -124,7 +124,7 @@ for prune_ratio in pruning_ratios:
     ut.train(one_shot_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
     oneshot_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_reinit_model, test_loader))
     # One-shot pruning ECE
-    oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader, 'results/FashionMNIST/oneshot_reinit/oneshot_reinit'+str(prune_ratio)+'.png'))
+    oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader, 'results/MNIST/oneshot_reinit/oneshot_reinit'+str(prune_ratio)+'.png'))
 
     # One-shot random reinit pruning accuracy
     torch.manual_seed(19)
@@ -137,7 +137,7 @@ for prune_ratio in pruning_ratios:
     ut.train(one_shot_random_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
     oneshot_random_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_random_reinit_model, test_loader))
     # One-shot pruning ECE
-    oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader, 'results/FashionMNIST/oneshotrandom_reinit/oneshotrandom_reinit'+str(prune_ratio)+'.png'))
+    oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader, 'results/MNIST/oneshotrandom_reinit/oneshotrandom_reinit'+str(prune_ratio)+'.png'))
 
 # Plot Accuracy vs Pruning Ratio
 plt.figure().clear()
@@ -152,7 +152,7 @@ plt.title("Accuracy vs. Pruning Ratio")
 plt.xlabel("Pruning Ratio")
 plt.ylabel("Accuracy")
 plt.grid()
-plt.savefig('results/FashionMNIST/acc_vs_pm.png')
+plt.savefig('results/MNIST/acc_vs_pm.png')
 
 # Plot ECE vs Pruning Ratio
 plt.figure().clear()
@@ -167,4 +167,4 @@ plt.title("Expected Calibration Error (ECE) vs. Pruning Ratio")
 plt.xlabel("Pruning Ratio")
 plt.ylabel("ECE")
 plt.grid()
-plt.savefig('results/FashionMNIST/ece_vs_pruning_ratio.png')
+plt.savefig('results/MNIST/ece_vs_pruning_ratio.png')
