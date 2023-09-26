@@ -108,15 +108,16 @@ def _reliability_diagram_subplot(ax, bin_data,
     ax.plot([0,1], [0,1], linestyle = "--", color="gray")
     
     if draw_ece:
-        ece = (bin_data["expected_calibration_error"] * 100)
-        ax.text(0.98, 0.02, "ECE=%.2f" % ece, color="black", 
-                ha="right", va="bottom", transform=ax.transAxes)
+        ece = (bin_data["expected_calibration_error"])
+        ax.set_title(title + "ECE=%.2f" % ece)
+        # ax.text(0.98, 0.02, "ECE=%.2f" % ece, color="black", # ha="right", va="bottom", transform=ax.transAxes)
+    else:
+        ax.set_title(title)
 
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     #ax.set_xticks(bins)
 
-    ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
