@@ -29,9 +29,9 @@ class MLP(nn.Module):
     def __init__(self):
         super(MLP, self).__init__()
         self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(28 * 28, 128)
+        self.fc1 = nn.Linear(28 * 28, 512)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(128, 10)
+        self.fc2 = nn.Linear(512, 10)
 
     def update_layers(self, new_layers):
         for i, new_layer in enumerate(new_layers):
@@ -49,9 +49,9 @@ class MLP(nn.Module):
 model = MLP()      
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 criterion = nn.CrossEntropyLoss()
-epochs = 10
+epochs = 5
 untrained_model = copy.deepcopy(model)
-ut.train(model, train_loader, criterion, optimizer, epochs = 10)
+ut.train(model, train_loader, criterion, optimizer, epochs = 5)
 
 # Evaluation on the test set
 unpruned_accuracy = ut.calculate_accuracy(model, test_loader)
@@ -61,7 +61,7 @@ print(f"ECE on the test set (Unpruned): {unpruned_ece}")
 
 # Iterative pruning Lottery Ticket Hypothesis
 # Iterative Pruning strategy 2 as defined in Lotetry Ticket Hypothesis paper
-def iterative_reinit_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 10):
+def iterative_reinit_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 5):
     
      # Per round pune ratio and number of epochs for every fine tuning
     per_round_prune_ratio = prune_ratio/prune_iter
@@ -79,8 +79,7 @@ def iterative_reinit_pruning( model, input_shape, output_shape, train_loader, pr
     return model
 
 # Plot Accuracy vs Pruning Ratio
-num_prune_iter = 10
-pruning_ratios = np.linspace(0, 0.9, num_prune_iter)
+pruning_ratios = np.arange(.8, 1.0, .02)
 oneshot_pruning_accuracies = []
 oneshot_pruning_ece = []
 oneshot_reinit_pruning_accuracies = []
@@ -96,14 +95,14 @@ for prune_ratio in pruning_ratios:
 
     # Iterative pruning accuracy
     iterative_pruning_model = copy.deepcopy(untrained_model)
-    iterative_pruning_model = ut.iterative_pruning(iterative_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
+    iterative_pruning_model = ut.iterative_pruning(iterative_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 5)
     iterative_pruning_accuracies.append(ut.calculate_accuracy(iterative_pruning_model, test_loader))
     # Iterative pruning ECE
     iterative_pruning_ece.append(ut.expected_calibration_error(iterative_pruning_model, test_loader,'results/MNIST/iterative/iterative'+str(prune_ratio)+'.png'))
 
     # Iterative pruning strategy 2 accuracy
     iterative_reinit_pruning_model = copy.deepcopy(untrained_model)
-    iterative_reinit_pruning_model = iterative_reinit_pruning(iterative_reinit_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 10)
+    iterative_reinit_pruning_model = iterative_reinit_pruning(iterative_reinit_pruning_model, input_shape = 28*28, output_shape = 10, train_loader = train_loader, prune_ratio = prune_ratio, prune_iter = 5, max_iter = 5)
     iterative_reinit_pruning_accuracies.append(ut.calculate_accuracy(iterative_reinit_pruning_model, test_loader))
     # Iterative pruning ECE
     iterative_reinit_pruning_ece.append(ut.expected_calibration_error(iterative_reinit_pruning_model, test_loader,'results/MNIST/iterative_reinit/iterative_reinit'+str(prune_ratio)+'.png'))
@@ -121,20 +120,20 @@ for prune_ratio in pruning_ratios:
     unpruned_layers = ut.oneshot_reinit_pruning(one_shot_reinit_model, untrained_model, input_shape = 28*28, output_shape = 10, prune_ratio = prune_ratio)
     one_shot_reinit_model.update_layers(unpruned_layers)
     # Retrain the model
-    ut.train(one_shot_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
+    ut.train(one_shot_reinit_model, train_loader, criterion, optimizer, epochs = 5) 
     oneshot_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_reinit_model, test_loader))
     # One-shot pruning ECE
     oneshot_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_reinit_model, test_loader, 'results/MNIST/oneshot_reinit/oneshot_reinit'+str(prune_ratio)+'.png'))
 
     # One-shot random reinit pruning accuracy
-    torch.manual_seed(19)
+    torch.manual_seed(30)
     random_model = MLP()
     torch.manual_seed(42)
     one_shot_random_reinit_model = copy.deepcopy(model)
     unpruned_layers = ut.oneshot_reinit_pruning(one_shot_random_reinit_model, random_model, input_shape = 28*28, output_shape = 10, prune_ratio = prune_ratio)
     one_shot_random_reinit_model.update_layers(unpruned_layers)
     # Retrain the model
-    ut.train(one_shot_random_reinit_model, train_loader, criterion, optimizer, epochs = 10) 
+    ut.train(one_shot_random_reinit_model, train_loader, criterion, optimizer, epochs = 5) 
     oneshot_random_reinit_pruning_accuracies.append(ut.calculate_accuracy(one_shot_random_reinit_model, test_loader))
     # One-shot pruning ECE
     oneshot_random_reinit_pruning_ece.append(ut.expected_calibration_error(one_shot_random_reinit_model, test_loader, 'results/MNIST/oneshotrandom_reinit/oneshotrandom_reinit'+str(prune_ratio)+'.png'))

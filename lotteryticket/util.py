@@ -7,8 +7,6 @@ import pandas as pd
 import torch.nn.functional as F
 import copy
 
-
-
 # Defining Accuracy
 def calculate_accuracy(model, test_loader):
     model.eval()
@@ -23,7 +21,7 @@ def calculate_accuracy(model, test_loader):
     return (100 * correct / total) 
 
 # Training loop
-def train(model, train_loader, criterion, optimizer, epochs=10):
+def train(model, train_loader, criterion, optimizer, epochs=5):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     for epoch in range(epochs):
@@ -65,6 +63,7 @@ def expected_calibration_error(model, test_loader, title, M=20):
             output = model(data)
             output = F.softmax(output, dim=1)
             _, predicted = torch.max(output.data, 1)
+            _ = output[:,5] # get the confidence of label 5 
             predicted_labels.append(predicted)
             true_labels.append(target)
             confidences.append(_)
@@ -167,7 +166,7 @@ def oneshot_reinit_pruning( model, untrained_model, input_shape, output_shape, p
 # The accuracy drops after pruning so we fine tune the model
 def iterative_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 10):
     
-     # Per round pune ratio and number of epochs for every fine tuning
+    # Per round pune ratio and number of epochs for every fine tuning
     per_round_prune_ratio = prune_ratio/prune_iter
     if prune_ratio > 0:
         per_round_prune_ratio = 1 - (1 - prune_ratio) ** (1 / prune_iter)
