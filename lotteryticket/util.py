@@ -8,28 +8,29 @@ import torch.nn.functional as F
 import copy
 
 # Defining Accuracy
-def calculate_accuracy(model, test_loader):
+def calculate_accuracy(model, test_loader, device='cpu'):
     model.eval()
     correct = 0
     total = 0
     with torch.no_grad():
         for data, target in test_loader:
-            output = model(data)
+            target = target.to(device)
+            output = model(data.to(device))
             _, predicted = torch.max(output.data, 1)
             total += target.size(0)
             correct += (predicted == target).sum().item()
     return (100 * correct / total) 
 
 # Training loop
-def train(model, train_loader, criterion, optimizer, epochs=1):
+def train(model, train_loader, criterion, optimizer, epochs=1, device='cpu'):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     for epoch in range(epochs):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
+            output = model(data.to(device))
+            loss = criterion(output, target.to(device))
             loss.backward()
             optimizer.step()
 
@@ -46,7 +47,7 @@ def add_layer(unpruned_layers, input_shape, output_shape, layer_wt_data, layer_b
         layer.bias.data = layer_bias_data
     unpruned_layers.append(layer)
 
-def expected_calibration_error(model, test_loader, title, M=10):
+def expected_calibration_error(model, test_loader, title=None, M=10, device='cpu'):
     # uniform binning approach with M number of bins
     bin_boundaries = np.linspace(0, 1, M + 1)
     bin_lowers = bin_boundaries[:-1]
@@ -60,7 +61,8 @@ def expected_calibration_error(model, test_loader, title, M=10):
     model.eval()
     with torch.no_grad():
         for data, target in test_loader:
-            output = model(data)
+            target = target.to(device)
+            output = model(data.to(device))
             output = F.softmax(output, dim=1)
             _, predicted = torch.max(output.data, 1)
             predicted_labels.append(predicted)
@@ -68,9 +70,9 @@ def expected_calibration_error(model, test_loader, title, M=10):
             confidences.append(_)
 
     # get binary class predictions from confidences
-    predicted_labels = torch.cat(predicted_labels).numpy()
-    true_labels = torch.cat(true_labels).numpy()
-    confidences = torch.cat(confidences).numpy()
+    predicted_labels = torch.cat(predicted_labels).cpu().numpy()
+    true_labels = torch.cat(true_labels).cpu().numpy()
+    confidences = torch.cat(confidences).cpu().numpy()
 
     # get a boolean list of correct/false predictions
     accuracies = predicted_labels==true_labels   
@@ -94,15 +96,16 @@ def expected_calibration_error(model, test_loader, title, M=10):
         else:
             reliabilities.append(0.0)  # Avoid division by zero
 
-    # Plot the reliability diagram
-    plt.figure(figsize=(6, 6))
-    plt.plot([0, 1], [0, 1], linestyle="--", color="gray")  # Diagonal reference line
-    plt.plot(np.linspace(0, 1, M), reliabilities, marker="o", linestyle="-", color="blue")
-    plt.xlabel("Mean Predicted Probability")
-    plt.ylabel("Empirical Accuracy")
-    plt.title(f"Reliability Diagram (ECE = {ece[0]:.4f})")
-    plt.grid(True)
-    plt.savefig(title)
+    if title:
+        # Plot the reliability diagram
+        plt.figure(figsize=(6, 6))
+        plt.plot([0, 1], [0, 1], linestyle="--", color="gray")  # Diagonal reference line
+        plt.plot(np.linspace(0, 1, M), reliabilities, marker="o", linestyle="-", color="blue")
+        plt.xlabel("Mean Predicted Probability")
+        plt.ylabel("Empirical Accuracy")
+        plt.title(f"Reliability Diagram (ECE = {ece[0]:.4f})")
+        plt.grid(True)
+        plt.savefig(title)
     return ece
 
 # In this method, we prune prune_ratio fatures in each layer
@@ -166,7 +169,7 @@ def oneshot_reinit_pruning( model, untrained_model, input_shape, output_shape, p
 # The nn.Sequential method randomly initialises when called 
 # So we copy the weights of the model before pruning using indexing
 # The accuracy drops after pruning so we fine tune the model
-def iterative_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 1):
+def iterative_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 1, device='cpu'):
     
     # Per round pune ratio and number of epochs for every fine tuning
     per_round_prune_ratio = prune_ratio/prune_iter
@@ -178,13 +181,14 @@ def iterative_pruning( model, input_shape, output_shape, train_loader, prune_rat
     for epoch in range(max_iter):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
+            data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
             optimizer.step()
         if (epoch + 1) % per_round_max_iter == 0:
-            unpruned_layers = [] 
+            unpruned_layers = []
             layers_pruned = []
             layer_index = 0
             for name, module in model.named_children():
