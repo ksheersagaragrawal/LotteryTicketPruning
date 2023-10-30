@@ -2,3 +2,4 @@ __pycache__
 oneshot_pruned_model
 oneshot_reinitialised_pruned_model
 MNIST
+lotteryticket/CIFAR10

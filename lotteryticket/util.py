@@ -119,7 +119,7 @@ def oneshot_pruning( model, input_shape, output_shape, prune_ratio = 0.2):
         if isinstance(module, nn.Linear):
             layer_index += 1
             # Not pruning the last output layer if param.shape[0] == output_shape:
-            if layer_index==3:
+            if layer_index==2:
                 add_layer(unpruned_layers, input_shape, output_shape, get_data(module.weight, layers_pruned),module.bias)
                 continue
             # Sorting the features in a layer based on l1 norm
@@ -145,7 +145,7 @@ def oneshot_reinit_pruning( model, untrained_model, input_shape, output_shape, p
         if isinstance(module, nn.Linear):
             layer_index += 1
             # Not pruning the last output layer if param.shape[0] == output_shape:
-            if layer_index==3:
+            if layer_index==2:
                 add_layer(unpruned_layers, input_shape, output_shape, get_data(module.weight, layers_pruned),module.bias)
                 continue
             # Sorting the features in a layer based on l1 norm
@@ -169,13 +169,13 @@ def oneshot_reinit_pruning( model, untrained_model, input_shape, output_shape, p
 # The nn.Sequential method randomly initialises when called 
 # So we copy the weights of the model before pruning using indexing
 # The accuracy drops after pruning so we fine tune the model
-def iterative_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 1, device='cpu'):
+def iterative_pruning( model, input_shape, output_shape, train_loader, prune_ratio, prune_iter, max_iter = 10, device='cpu'):
     
     # Per round pune ratio and number of epochs for every fine tuning
     per_round_prune_ratio = prune_ratio/prune_iter
     if prune_ratio > 0:
         per_round_prune_ratio = 1 - (1 - prune_ratio) ** (1 / prune_iter)
-    per_round_max_iter = int(max_iter / prune_iter)
+    per_round_max_iter = int(max_iter / (2*prune_iter))
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     for epoch in range(max_iter):
@@ -187,7 +187,7 @@ def iterative_pruning( model, input_shape, output_shape, train_loader, prune_rat
             loss = criterion(output, target)
             loss.backward()
             optimizer.step()
-        if (epoch + 1) % per_round_max_iter == 0:
+        if (epoch + 1) > max_iter/2 and (epoch + 1) % per_round_max_iter == 0:
             unpruned_layers = []
             layers_pruned = []
             layer_index = 0
@@ -196,7 +196,7 @@ def iterative_pruning( model, input_shape, output_shape, train_loader, prune_rat
                 if isinstance(module, nn.Linear):
                     layer_index+=1
                     # Not pruning the last output layer if param.shape[0] == output_shape:
-                    if layer_index==3:
+                    if layer_index==2:
                         add_layer(unpruned_layers, input_shape, output_shape, get_data(module.weight, layers_pruned),module.bias)
                         continue
                     # Sorting the features in a layer based on l1 norm

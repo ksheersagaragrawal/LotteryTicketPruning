@@ -21,15 +21,20 @@ def calculate_accuracy(model, test_loader):
     return (100 * correct / total) 
 
 # Training loop
-def train(model, train_loader, criterion, optimizer, epochs=1):
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+def train(model, train_loader, criterion, optimizer, epochs=1, bayesian=False):
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.Adam(model.parameters(), lr=0.001)
     for epoch in range(epochs):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
+            if bayesian:
+                output = torch.log_softmax(model(data), dim=2).mean(dim=0)
+                loss = criterion(output, target)
+            else:
+                output = model(data)
+                loss = criterion(output, target)
+            # print(output.shape, target.shape)
             loss.backward()
             optimizer.step()
 
