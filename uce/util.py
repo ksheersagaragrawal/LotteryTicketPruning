@@ -217,7 +217,7 @@ def iterative_pruning( model, input_shape, output_shape, train_loader,fine_tune_
                 train(model, fine_tune_loader, criterion, optimizer, epochs = 1) 
     return model
 
-def plot_reliability_diagrams(acc2, err1, acc1, ece2, ece1, uce1, save_path):
+def plot_reliability_diagrams(acc2, acc1, err1, ece2, ece1, uce1, save_path):
     # Create a single figure with subplots
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -233,7 +233,7 @@ def plot_reliability_diagrams(acc2, err1, acc1, ece2, ece1, uce1, save_path):
 
     # Plot the reliability diagram for err1
     axes[1].plot([0, 1], [0, 1], linestyle="--", color="gray")  # Diagonal reference line
-    axes[1].plot(np.linspace(0, 1, len(err1)), err1, marker="o", linestyle="-", color="blue")
+    axes[1].plot(np.linspace(0, 1, len(acc1)), acc1, marker="o", linestyle="-", color="blue")
     axes[1].set_ylabel("Accuracy")
     axes[1].set_title("MC Dropout Confidence") 
     axes[1].grid(True)
@@ -243,7 +243,7 @@ def plot_reliability_diagrams(acc2, err1, acc1, ece2, ece1, uce1, save_path):
 
     # Plot the reliability diagram for acc1
     axes[2].plot([0, 1], [0, 1], linestyle="--", color="gray")  # Diagonal reference line
-    axes[2].plot(np.linspace(0, 1, len(acc1)), acc1, marker="o", linestyle="-", color="blue")
+    axes[2].plot(np.linspace(0, 1, len(err1)), err1, marker="o", linestyle="-", color="blue")
     axes[2].set_ylabel("Error")
     axes[2].set_title("MC Dropout Uncertainty")
     axes[2].grid(True)
