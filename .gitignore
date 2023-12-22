@@ -1,5 +1,3 @@
 __pycache__
-oneshot_pruned_model
-oneshot_reinitialised_pruned_model
-MNIST
-lotteryticket/CIFAR10
+archive/lotteryticket_v1/MNIST
+archive/lotteryticket_v1/FashionMNIST
