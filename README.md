@@ -1,4 +1,4 @@
-# Effects of Structured Pruning on Handling Uncertainty Estimates
+# Effects of Structured Pruning a Neural Network on Handling Uncertainty Estimates
 [![forthebadge made-with-python](http://ForTheBadge.com/images/badges/made-with-python.svg)](https://www.python.org/)
 [![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
 
