@@ -56,7 +56,7 @@ This project builds upon significant previous work in the field of neural networ
 - Blalock, D., Gonzalez Ortiz, J. J., Frankle, J., & Guttag, J. (2020). What is the state of Neural Network Pruning? Available at [arXiv:2003.03033](https://arxiv.org/abs/2003.03033).
 - Bansal, V., Khoiwal, R., Shastri, H., Khandor, H., & Batra, N. (2022). "I do not know": Quantifying Uncertainty in Neural Network Based Approaches for Non-Intrusive Load Monitoring. Available at [Nipun Batra’s publications](https://nipunbatra.github.io/papers/2022/buildsys22-nilm.pdf).
 - Daxberger, E., Nalisnick, E., Allingham, J. U., Antoran, J., & Hernández-Lobato, J. M. (2021). Bayesian Deep Learning and a Probabilistic Perspective of Generalization. Available at [ICML Proceedings](https://proceedings.mlr.press/v139/daxberger21a/daxberger21a.pdf).
-- Laves, M.-H., Ihler, S., Kortmann, K.-P., & Ortmaier, T. (2021). Well-calibrated Model Uncertainty with Temperature Scaling. Available at [MLR Proceedings](https://proceedings.mlr.press/v139/daxberger21a/daxberger21a.pdf).
+- Laves, M.-H., Ihler, S., Kortmann, K.-P., & Ortmaier, T. (2021). Well-calibrated Model Uncertainty with Temperature Scaling. Available at [MLR Proceedings](https://arxiv.org/pdf/1909.13550.pdf).
 
 The contributions of Ksheer Agrawal, Lipika Rajpal, and Kanshik Singhal have been invaluable in the development and success of this project.
 
